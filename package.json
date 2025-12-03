@@ -1,6 +1,6 @@
 {
   "name": "@apollo-vault/core",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Apollo Client que funciona 100% offline com entrega eventual, orquestração e cache persistido",
   "keywords": [
     "apollo",
