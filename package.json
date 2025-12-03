@@ -1,0 +1,55 @@
+{
+  "name": "@apollo-vault/core",
+  "version": "1.0.1",
+  "description": "Apollo Client que funciona 100% offline com entrega eventual, orquestração e cache persistido",
+  "keywords": [
+    "apollo",
+    "apollo-client",
+    "graphql",
+    "offline-first",
+    "eventual-consistency",
+    "pwa",
+    "react-native",
+    "nextjs",
+    "orchestration",
+    "localforage",
+    "indexeddb"
+  ],
+  "author": "Daniel Costa",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/manoxum/apollo-vault-core.git"
+  },
+  "bugs": {
+    "url": "https://github.com/manoxum/apollo-vault-core/issues"
+  },
+  "homepage": "https://github.com/manoxum/apollo-vault-core#readme",
+  "sideEffects": false,
+  "type": "module",
+  "main": "./src/index.ts",
+  "scripts": {
+    "build": "tsup",
+    "prepublishOnly": "#npm run build",
+    "lint": "eslint . --ext .ts,.tsx",
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "@apollo/client": "^4.0.0",
+    "graphql": "^16.8.0",
+    "react": ">=16.8.0"
+  },
+  "dependencies": {
+    "nanoid": "^5.0.0"
+  },
+  "devDependencies": {
+    "@esbuild-plugins/node-globals-polyfill": "^0.2.3",
+    "@esbuild-plugins/node-modules-polyfill": "^0.2.2",
+    "@types/react": "^18.2.0",
+    "crypto-browserify": "^3.12.1",
+    "eslint": "^8.57.0",
+    "localforage": "^1.10.0",
+    "tsup": "^8.5.1",
+    "typescript": "^5.5.0"
+  }
+}
