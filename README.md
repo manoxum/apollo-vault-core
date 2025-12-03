@@ -158,22 +158,15 @@ Hooks like `useAuthRefresh` listen to Vault's 'unauthenticated' event:
 
 ```typescript
 useEffect(() => {
-  const unsub = vault.subscribe('unauthenticated', () => {
-    setNeedRefresh({ message: 'unauthenticated', code: nanoid(4) });
+  const unsub = vault.subscribe('unauthenticated', async() => {
+      await {Authorization} = YourImplementedRefreshTokenHandler();
+      storeAuthorization({Authorization});
   });
   return unsub;
 }, [vault]);
 ```
 
-`AuthRefreshService` handles API calls for refresh:
 
-```typescript
-AuthRefreshService.refresh('unauthenticated', health).then(refreshed => {
-  if (refreshed.refreshed) {
-    storeAuthorization(/* updated auth */);
-  }
-});
-```
 
 ### Orchestration Setup and Execution
 
@@ -183,23 +176,33 @@ In `orchestration.ts`:
 
 ```typescript
 import { orchestrate, registry } from 'apollo-vault';
-import { MUTATION_SETS_INSPECTION_WITH_ATTACHES } from './SetsInspections';
 
 const { root, fn, node } = orchestrate<{ /* Inputs */ }>();
 
-export const INSPECTION_ORCHESTRATION_REGISTRY = registry(/* URL details */, 'INSPECTION_ORCHESTRATION');
-export const INSPECTION_ORCHESTRATION = root({
-  registry: INSPECTION_ORCHESTRATION_REGISTRY,
-  operation: MUTATION_SETS_INSPECTION_WITH_ATTACHES,
-  variables: (initials) => initials?.SetsInspections,
+const OPERATION_ROOT = gql`/*Your GraphQL Query or Mutation Definition*/`
+const OPERATION_CHILD = gql`/*Your GraphQL Query or Mutation Definition*/`
+const OPERATION_CHILD2 = gql`/*Your GraphQL Query or Mutation Definition*/`
+
+INSPECTION_PAGE_URL = import.meta.url;
+export const YOUR_ORCHESTRATION_REGISTRY = registry(INDEX_URL, INSPECTION_PAGE_URL, 'INSPECTION_ORCHESTRATION');
+export const YOUR_ORCHESTRATION = root({
+  registry: ORCHESTRATION_NAME_REGISTRY,
+  operation: OPERATION_ROOT,
+  variables: (initials) => initials?.variables,
   context: (initial) => ({
     EventualDelivery: { eventual: 'always', message: 'Bind attach...', retry: 10 },
   }),
   linked: {
-    AttachFiles: fn((initials) => {
+    ChildOperation: fn((initials) => {
       return initials?.FilesUploads?.map(file => node({
-        operation: BIND_ATTACHES_INTO_INSPECTIONS,
+        operation: OPERATION_CHILD,
         variables: { /* file details */ },
+          linked: {
+            ChildChildOperation: node({
+                operation: OPERATION_CHILD2,
+                variables:()=> ({/*Resolvable Variables*/})
+            })
+          }
       })) ?? [];
     }),
   },
@@ -221,7 +224,7 @@ useRegistryOrchestrationService(); // Registers INSPECTION_ORCHESTRATION
 Execute with `useOrchestration`:
 
 ```tsx
-const { execute, data, error, executing } = useOrchestration(INSPECTION_ORCHESTRATION_REGISTRY, INSPECTION_ORCHESTRATION);
+const { execute, data, error, executing } = useOrchestration(YOUR_ORCHESTRATION_REGISTRY, YOUR_ORCHESTRATION);
 execute({ variables: { /* inputs */ } });
 ```
 
