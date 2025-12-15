@@ -22,7 +22,7 @@ export function CreateApolloVault<
 
     const services = CreateApolloVaultServices(SCHEMA_VERSION, opts);
 
-    const orchestrationLink = CreateOrchestrationLink(services);
+    const orchestrationLink = CreateOrchestrationLink( services);
     const monitoringLink = CreateMonitoringLink( services );
     const cacheLink = CreateCacheControlLink( services );
     const eventualRequestLink = CreateMutationEventualDeliveryLink( services );

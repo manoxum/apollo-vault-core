@@ -4,7 +4,7 @@ import {
     OrchestrationLinkedResolver,
     OrchestrationLinkedResolverClass
 } from "../types";
-import  * as Path from "path";
+import  Path from "path";
 
 export function getCallerFile(stackLevel = 2): string {
     // Se não estiver em Node (ex: React), não funciona → devolver "<browser>"

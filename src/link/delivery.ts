@@ -60,6 +60,7 @@ export function CreateMutationEventualDeliveryLink<
                 const createEventual = ( errors?:GraphQLError[] )=>{
                     EventualDelivery.retry = EventualDelivery?.retry || 10;
 
+                    // Remove headers de autorização para não vazar token no storage
                     ["authorization", "Authorization", "AUTHORIZATION"].forEach( (value) => {
                         if( !!context?.headers?.[value] ) delete context?.headers?.[value];
                     });
@@ -70,6 +71,7 @@ export function CreateMutationEventualDeliveryLink<
                         variables: operation.variables,
                         context: context,
                         eventualRetry: EventualDelivery?.retry || 10,
+                        tags: EventualDelivery?.tags,
                         EventualDelivery,
                         status: "eventual",
                         UseIdentity: UseIdentity,
@@ -120,7 +122,6 @@ export function CreateMutationEventualDeliveryLink<
                         if( EventualDelivery.eventual === "error" || EventualDelivery.eventual === "on-first-error" )
                             return createEventual([err])
                         observer.error(err);
-                        observer.complete();
                     },
                 });
             })();

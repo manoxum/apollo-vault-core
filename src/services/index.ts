@@ -15,11 +15,11 @@ import {FormattedExecutionResult} from "graphql/execution";
 import {UPDATABLE_FIELDS} from "../updatable";
 import {OpenStorages} from "../storage";
 import {DeliveryPendentEntriesService} from "./EventualExecution";
-import {ExecuteOrchestrationFromResponseService, ExecuteOrchestrationService} from "./orchestration";
+import {ExecuteOrchestrationEventually, ExecuteOrchestrationService} from "./orchestration";
 import {
     CreateEventualEntry,
     CreateEventualEntryFromNodeOrchestration,
-    EventualDeliveryOrchestrationFromRegistry
+    EventualDeliveryOrchestrationFromRegistry, RemoveEventualEntry, UpdateEventualEntry
 } from "./EventualRegistry";
 import {isOrchestrationNode, isOrchestrationNodeResponse} from "../utils/typeof";
 import {ResolveOrchestrationRoot} from "./OrchestrationRoot";
@@ -160,6 +160,12 @@ export function CreateApolloVaultServices <
             return CreateEventualEntry( service, entry );
         },
 
+        updateEventual(  entry ) {
+            return  UpdateEventualEntry( service, entry );
+        },
+        removeEventual(  entry ) {
+            return  RemoveEventualEntry( service, entry );
+        },
         createEventualFormOrchestration(result) {
             return CreateEventualEntryFromNodeOrchestration(service, result );
         },
@@ -172,7 +178,7 @@ export function CreateApolloVaultServices <
             if( isOrchestrationNode( node ) ){
                 return ExecuteOrchestrationService( service, node );
             } else if( isOrchestrationNodeResponse( node ) ){
-                return ExecuteOrchestrationFromResponseService( service, node);
+                return ExecuteOrchestrationEventually( service, node);
             }
             throw new Error( "Node is not OrchestrationNode or OrchestrationNodeResponse",  );
         },

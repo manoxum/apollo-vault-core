@@ -8,6 +8,41 @@ import {DocumentNode} from "@apollo/client";
 import {GraphQLError} from "graphql/index";
 import {isOrchestrationNodeResponse} from "../utils/typeof";
 
+export async function RemoveEventualEntry<
+    ID extends { [k in keyof ID]?:ID[k]},
+    AUTH extends { [k in keyof AUTH]?:AUTH[k]}
+>( service:ApolloVaultService<ID,AUTH>, entry:EventualDeliveryTask<ID,AUTH> ):Promise<{entry?: EventualDeliveryTask<ID, AUTH> | undefined, error?: GraphQLError}>{
+    return new Promise( resolve => {
+        service.ApolloEventualDelivery.removeItem( entry.identifier! ).then(() => {
+            resolve({ entry });
+        }).catch((saveError) => {
+            resolve({ error: saveError });
+        });
+    });
+}
+export async function RemoveEventualEntryByID<
+    ID extends { [k in keyof ID]?:ID[k]},
+    AUTH extends { [k in keyof AUTH]?:AUTH[k]}
+>( service:ApolloVaultService<ID,AUTH>, identifier:string ):Promise<{entry?: EventualDeliveryTask<ID, AUTH> | undefined, error?: GraphQLError}> {
+    const entry =(await service.ApolloEventualDelivery.getItem<EventualDeliveryTask<ID,AUTH>>( identifier ))!;
+    return new Promise( resolve => {
+        service.ApolloEventualDelivery.removeItem( identifier ).then(() => {
+            resolve({ entry });
+        }).catch((saveError) => {
+            resolve({ error: saveError });
+        });
+    });
+}
+
+export async function UpdateEventualEntry<
+    ID extends { [k in keyof ID]?:ID[k]},
+    AUTH extends { [k in keyof AUTH]?:AUTH[k]}
+>( service:ApolloVaultService<ID,AUTH>, entry:EventualDeliveryTask<ID,AUTH> ){
+    if( entry.OrchestrationNodeResponse )
+        entry.OrchestrationNodeResponse = cleanOrchestrationResponse(entry.OrchestrationNodeResponse);
+    return CreateEventualEntry( service , entry );
+}
+
 export function CreateEventualEntry<
     ID extends { [k in keyof ID]?:ID[k]},
     AUTH extends { [k in keyof AUTH]?:AUTH[k]}
@@ -24,14 +59,11 @@ export function CreateEventualEntry<
         entry.instant = new Date().toISOString();
     }
 
-    console.log("func:CreateEventualEntry", entry);
+    if( !entry.identity ) entry.identity = service.status.identity;
     return new Promise( resolve => {
         service.ApolloEventualDelivery.setItem( identifier, entry ).then(() => {
-            console.log("func:CreateEventualEntry:sucess", entry);
-
             resolve({ entry });
         }).catch((saveError) => {
-            console.log("func:CreateEventualEntry:failed", saveError);
             resolve({ error: saveError });
         });
     });
@@ -53,6 +85,7 @@ export async function CreateEventualEntryFromNodeOrchestration<
         instant: new Date().toISOString(),
         query: node?.operation as DocumentNode,
         variables: vars,
+        tags: EventualDelivery.tags,
         context: context,
         eventualRetry: EventualDelivery?.retry || 10,
         EventualDelivery: EventualDelivery,

@@ -5,11 +5,16 @@
 import {ApolloLink, Observable} from "@apollo/client";
 import {ExecutionResult} from "graphql/execution";
 import {print} from "graphql/index";
-import {createHashFromObject, sha256Truncated} from "../utils/sha";
+import { deterministicSha256 } from "../utils/sha";
 import {CachedQueryInclusion, CachedQueryResponse, ApolloVaultService} from "../types";
-import {serializeObject} from "../utils/serialize";
 
-const KEYMOUNT:CachedQueryInclusion[] = [ "identity", "query", "variables", "operation" ];
+const KEYMOUNT:CachedQueryInclusion[] = [
+    "operation",
+    "query",
+    "identity",
+    "variables",
+    "context",
+];
 
 
 
@@ -20,8 +25,11 @@ export function CreateCacheControlLink <
     return new ApolloLink((operation, forward) => {
         const OPERATION = operation.operationName ?? "UnnamedQuery";
         const context = operation.getContext() ?? {};
-        const { CachedQuery } = context;
+        const variables = operation.variables??{};
+        const { CachedQuery, UseIdentity } = context;
         const noKeep = context.noKeep === true;
+        const useIdentity= (UseIdentity ?? instance.status.UseIdentity) as keyof ID;
+        const identity  = instance.status.identity?.[useIdentity];
 
         return new Observable<ExecutionResult>((observer) => {
             (async () => {
@@ -36,22 +44,19 @@ export function CreateCacheControlLink <
 
                     const queryText = print(operation.query);
 
-                    const KEYRESOLVE:{[ k in  CachedQueryInclusion]:(  )=>string} = {
-                        identity(){
-                            const { UseIdentity } = operation.getContext();
-                            const useAuthorization= (UseIdentity ?? instance.status.UseIdentity) as keyof ID;
-                            const auth  = instance.status.identity?.[useAuthorization];
-                            return sha256Truncated(auth, 16)
+                    const KEYRESOLVE:{[ k in  CachedQueryInclusion]:()=>unknown} = {
+                        operation(){
+                            return OPERATION
+                        }, identity() {
+                            return identity
                         }, query() {
-                            const queryHash = sha256Truncated(queryText, 8);
-                            return `?${queryHash}`;
+                            return queryText
                         }, variables(){
-                            const variables = serializeObject(operation.variables);
-                            const variablesHash = createHashFromObject(variables, 24);
-                            return `?${variablesHash}`;
-                        }, operation(){
-                            const OPERATION = operation.operationName ?? "UnnamedQuery";
-                            return `/${OPERATION}`;
+                            return variables
+                        }, context(){
+                            let ctx:Record<string, unknown> = {};
+                            if( typeof CachedQuery?.fromContext === "function" ) ctx = CachedQuery.fromContext( context );
+                            return ctx ?? {};
                         }
                     } as const;
 
@@ -61,10 +66,15 @@ export function CreateCacheControlLink <
                         : CachedQuery?.excludes?.length ? [ CachedQuery?.excludes ]
                         : [];
 
-                    const cacheKey = KEYMOUNT.filter( value => !exclusion?.includes(value) )
-                        .map(key => KEYRESOLVE[key]())
-                        .join("")
+                    const inputs = Object.fromEntries(  KEYMOUNT
+                        .filter( value => !exclusion?.includes(value) )
+                        .map( key => ([ (key as string), KEYRESOLVE[key]()] as const) )
+                    );
 
+
+                    const { hash, serialized } = deterministicSha256( inputs, CachedQuery?.serialize );
+
+                    const cacheKey = `${OPERATION}_${hash}`;
 
                     let cached = await instance?.ApolloQueryCached?.getItem<CachedQueryResponse>(cacheKey);
                     if (cached && !cached?.response?.data) {
@@ -73,17 +83,17 @@ export function CreateCacheControlLink <
                     }
 
                     const useCache =
-                        CachedQuery?.mode === "cache-first"
-                            ? true
-                            : CachedQuery?.mode === "no-cache"
-                                ? false
-                                : !health;
+                        CachedQuery?.mode === "cache-first" ? true
+                        : CachedQuery?.mode === "no-cache" ? false
+                        : CachedQuery?.mode === "update" ? false
+                        : !health;
 
-                    if (useCache && isQuery && cached && "data" in (cached?.response??{})) {
-                        cached.score = cached.score + 1;
-                        await instance.ApolloQueryCached?.setItem(cacheKey, cached);
-                        const response = cached.response;
-                        delete cached.response;
+
+                    const FromCache = useCache && isQuery && !!cached && "data" in (cached?.response??{});
+                    if (FromCache) {
+                        cached!.score = cached!.score + 1;
+                        await instance.ApolloQueryCached?.setItem( cacheKey, cached );
+                        const response = cached!.response;
                         observer.next({
                             data: response?.data,
                             extensions: {
@@ -96,21 +106,20 @@ export function CreateCacheControlLink <
                     }
 
                     const start = performance.now();
-                    const sub = forward(operation).subscribe({
+                    const sub = forward( operation ).subscribe({
                         next: async (result) => {
                             const duration = performance.now() - start;
-
                             if (!result.errors && isQuery && !noKeep) {
                                 const instant = new Date();
                                 const now = new Date();
                                 const ttl = CachedQuery?.ttl ?? undefined;
                                 const expiration = ttl ? now.getTime() + ttl : undefined;
+                                const useIdentity= (UseIdentity ?? instance.status.UseIdentity) as keyof ID;
+                                const identity  = instance.status.identity?.[useIdentity];
 
                                 const entry: CachedQueryResponse = {
                                     response: {
-                                        data: result.data,
-                                        extensions: result.extensions,
-                                        errors: result.errors,
+                                        ... result,
                                     },
                                     query: queryText,
                                     moment: instant.toISOString(),
@@ -120,10 +129,18 @@ export function CreateCacheControlLink <
                                     duration,
                                     source: "network",
                                     partial: !!result.extensions?.hasNext,
+                                    identity: identity as string,
+                                    useIdentity: useIdentity as string,
+                                    variables: variables,
                                     ttl,
                                     expiration,
                                     ...(result.extensions ? { extensions: result.extensions } : {}),
-                                };
+                                    hash: {
+                                        calculated: hash,
+                                        inputs,
+                                        serialized
+                                    }
+                                } as CachedQueryResponse;
 
                                 try {
                                     entry.size = new Blob([JSON.stringify(entry)]).size;

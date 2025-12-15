@@ -265,14 +265,9 @@ function App() {
 Define groups, e.g., `MutationSyncGroup.ts`:
 
 ```typescript
-export function createMutationSyncGroup(sync) {
-  return {
-    id: 'MUTATION_SYNC',
-    handler: async (entry) => {
-      const response = await sync.apolloVaultInstance.deliveryEntries([key]);
-      // Handle errors
-    },
-  };
+export async function syncronizePendentMutation() {
+    const keys = await apolloVaultInstance.ApolloEventualDelivery.keys();
+    const response = await apolloVaultInstance.deliveryEntries( keys );
 }
 ```
 

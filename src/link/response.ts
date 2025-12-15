@@ -16,6 +16,7 @@ export function CreateMonitoringLink <
                     observer.next( response );
                 },
                 error( error ){
+                    console.error( `Error ao executar::error ${operation.operationName}`, error, error.message, error.code);
                     instance.publishResponse({ operation, response: { errors: error } });
                     observer.error( error );
                 },

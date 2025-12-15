@@ -10,6 +10,8 @@ function isFile(value: unknown): value is File | Blob {
 export function CreateBinaryParserLink <
     ID extends { [k in keyof ID]?:ID[k]},
     AUTH extends { [k in keyof AUTH]?:AUTH[k]}
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 >( instance:ApolloVaultService<ID,AUTH> ) {
     return new ApolloLink((operation, next ) => {
         const forward = ( )=>{

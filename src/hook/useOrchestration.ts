@@ -1,5 +1,5 @@
 import {useState, useCallback, useMemo} from "react";
-import { TypedDocumentNode } from "@apollo/client";
+import {DocumentNode, ExtensionResponses} from "@apollo/client";
 import { useApolloVault } from "./useApolloVault";
 import { ExecutionResult } from "graphql/execution";
 import {
@@ -11,11 +11,12 @@ import {GraphQLError} from "graphql/index";
 import {ResolveOrchestrationRoot} from "../services/OrchestrationRoot";
 
 
-export type ExecutionError<R> = ExecutionResult<R> & {
+export type OrchestrationExecutionResult<R> = ExecutionResult<R> & {
     error?:Error
+    extensions?: ExecutionResult<R> & ExtensionResponses
 }
 
-export type ExecuteCallback<A, R> = ( args: A ) => Promise<ExecutionError<R>>
+export type ExecuteCallback<A, R> = ( args: A ) => Promise<OrchestrationExecutionResult<R>>
 type UK_I = Record<string, unknown>;
 type UK_T = Record<string, unknown>;
 
@@ -67,7 +68,15 @@ export function useOrchestration<
             };
         }
 
-        const isMutation = root.operation.definitions.some(
+        let operation: DocumentNode;
+        if (typeof root.operation === "function") {
+            operation = await root.operation( args );
+        } else {
+            operation = await root.operation ;
+        }
+
+
+        const isMutation = operation.definitions.some(
             (def) => def.kind === "OperationDefinition" && def.operation === "mutation"
         );
 
@@ -75,10 +84,9 @@ export function useOrchestration<
             let result: ExecutionResult<R>;
             if (isMutation) {
                 result = await vault.client.mutate<R>({
-                    mutation: root.operation as TypedDocumentNode<R>,
+                    mutation: operation,
                     variables: root.variables,
                     context: {
-                        ...root.context??{},
                         OrchestrationNode: {
                             ...root,
                             arguments: args
@@ -87,7 +95,7 @@ export function useOrchestration<
                 });
             } else {
                 result = await vault.client.query<R>({
-                    query: root.operation as TypedDocumentNode<R>,
+                    query: operation,
                     variables: root.variables,
                     context: {
                         ...root.context??{},
@@ -120,7 +128,7 @@ export function useOrchestration<
         } finally {
             setExecuting(false);
         }
-    }, []);
+    }, [resolver, vault.client]);
 
 
     return {

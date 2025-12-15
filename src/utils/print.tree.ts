@@ -5,6 +5,7 @@ import {
     OrchestrationNodeResponse,
 } from "../types";
 import {isOrchestrationNodeResponse} from "./typeof";
+import {DocumentNode} from "@apollo/client";
 
 // --- AUXILIARY TYPES TO AVOID EXPLICIT 'ANY' ---
 // Define os tipos concretos mais gerais para os generics I e R
@@ -53,7 +54,7 @@ export function printOrchestrationTree(
     const verticalLine = isLast ? "    " : "│   ";
 
     // --- NODE METADATA ---
-    const operationName = (metadataSource.operation?.definitions?.[0] as { name?: { value: string } } | undefined)?.name?.value;
+    const operationName = ((metadataSource.operation as DocumentNode)?.definitions?.[0] as { name?: { value: string } } | undefined)?.name?.value;
     const keyDisplay = metadataSource.key ? ` (🔑 ${metadataSource.key})` : '';
     const nameDisplay = metadataSource.name ?? operationName ?? 'NO_OP';
 

@@ -1,4 +1,4 @@
-// filename: src/index.ts
+// filename: src/libs/apollo-vault/index.ts
 
 export * from "./provider";
 export * from "./hook/useIncrementalQuery";

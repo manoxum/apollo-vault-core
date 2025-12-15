@@ -26,9 +26,7 @@ function isUnauthenticatedError(errors: unknown, code?:string): boolean {
         };
 
         const errorContainer = errors as unknown as ErrorContainerWithGraphQLErrors;
-
         let sourceErrors: readonly (GraphQLFormattedError | GraphQLError)[] | undefined;
-
         if (errorContainer.graphQLErrors) {
             sourceErrors = errorContainer.graphQLErrors;
         }
@@ -45,7 +43,7 @@ function isUnauthenticatedError(errors: unknown, code?:string): boolean {
     }
 
     return errorList.some(value => {
-        return value?.extensions?.["code"] === (code??"UNAUTHENTICATED");
+        return value?.extensions?.code === ( code ?? "UNAUTHENTICATED" );
     });
 }
 
@@ -68,12 +66,17 @@ export function CreateUnauthenticatedLink <
                 const context = operation.getContext();
                 const isMutation = isMutationOperation(operation.query);
                 const isQuery = isQueryOperation(operation.query);
+                const Authorizations = Object.entries(await instance.status?.auth ?? {})
+                    .filter( ([, value]) => value !== undefined && value !== null )
+                ;
 
                 // 1. BYPASS check
                 const BYPASS = context.WaitAuthentication?.BYPASS
                     || !(context.WaitAuthentication ?? instance.status.WaitAuthentication)
                     || !(isQuery || isMutation)
                     || !(await instance.status.isHealthy())
+                    || !(Authorizations.length)
+                ;
 
                 if(BYPASS){
                     const sub = forward(operation).subscribe(observer);
@@ -82,7 +85,7 @@ export function CreateUnauthenticatedLink <
                 }
 
                 // Obtém configurações de WaitAuthentication
-                const timeout = context.WaitAuthentication?.timeout ?? instance.status.WaitAuthentication?.timeout ?? (15 * 1000);
+                const timeout = context.WaitAuthentication?.timeout ?? instance.status.WaitAuthentication?.timeout ?? (5 * 1000);
                 const maxAttempts = context.WaitAuthentication?.attempts ?? instance.status.WaitAuthentication?.attempts ?? 3;
                 let attemptsCount = context.WaitAuthentication?.attemptsCount ?? 1;
                 let isUnauthenticatedPublished = false;

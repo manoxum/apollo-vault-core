@@ -13,8 +13,7 @@ export function CreateAuthorizationLink <
                 try {
                     const  context = operation.getContext();
                     const RequestAuthorization = context.RequestAuthorization??{};
-                    const authorization = instance.status?.auth??{}
-
+                    const authorization = (await instance.status?.auth) ?? {}
                     operation.setContext(prevContext => ({
                         ...prevContext,
                         headers: {
@@ -23,11 +22,12 @@ export function CreateAuthorizationLink <
                             ... RequestAuthorization
                         }
                     }));
-
-                    forward(operation).subscribe(observer);
                 } catch (err) {
                     observer.error(err);
+                    return
                 }
+
+                forward(operation).subscribe(observer);
             })();
         });
     });

@@ -1,5 +1,4 @@
-// filename: src/types.ts
-
+// filename: src/libs/apollo-vault/types.ts
 
 
 // =====================================================
@@ -12,7 +11,6 @@ import {
     HttpLink,
 } from "@apollo/client";
 import {ExecutionResult, FormattedExecutionResult} from "graphql/execution";
-import {ObjMap} from "graphql/jsutils/ObjMap";
 import React from "react";
 import Operation = ApolloLink.Operation;
 import type {useQuery} from "@apollo/client/react";
@@ -48,6 +46,14 @@ declare module "@apollo/client" {
             attemptsCount?: number;
         }
     }
+
+    export type ExtensionResponses = {
+        EventualDeliveryResponse? :EventualDeliveryResponse<Record<string, unknown>,Record<string, unknown>>
+        OrchestrationResponse?:{
+            response: OrchestrationNodeResponse,
+            parsed: Record<string|symbol, unknown>
+        }
+    }
 }
 
 export interface EventualDeliveryContext<
@@ -55,6 +61,7 @@ export interface EventualDeliveryContext<
     AUTH extends { [k in keyof AUTH]?:AUTH[k]}
 > {
     eventual?: "on-first-error"|"error"|"always"|"no-healthy"
+    tags?:string[]
     retry?: number
     message?: string
     meta?: Record<string, unknown>
@@ -69,19 +76,26 @@ export type EventualDeliveryResponse<
 }
 
 
-export type CachedQueryInclusion ="identity"|"variables"|"query"|"operation";
+export type CachedQueryInclusion ="identity"|"variables"|"query"|"operation"|"context";
+export type Path = (string|number|symbol)[]
+export type SerializeObjectCallback<T, P> = (input: T, path: Path ) => P;
+export type SerializeObjectOptions = {
+    excludes?:Path[]
+    orderList?: 'default' | 'none' | SerializeObjectCallback<unknown[], unknown[]>
+    orderKeys?: 'default' | 'none' | SerializeObjectCallback<string[], string[]>
+}
 
 export interface CachedQueryContext {
+    serialize?:SerializeObjectOptions
+    fromContext?:( context:DefaultContext )=>Record<string, unknown>
     ttl?:number
-    mode?: "cache-first" | "network-first" | "no-cache"
+    mode?: "cache-first" | "network-first" | "no-cache" | "update"
     noKeep?: boolean
     excludes?: CachedQueryInclusion|(CachedQueryInclusion[])
 }
 
 
 
-
-// =====================================================
 // 🔹 Tipagem do delayed operation
 export interface EventualDeliveryTask <
     ID extends { [k in keyof ID]?:ID[k]},
@@ -99,6 +113,7 @@ export interface EventualDeliveryTask <
     response?:  unknown;
     errors?:unknown
     eventualRetry?:number
+    tags?:string[]
     EventualDelivery:EventualDeliveryContext<ID,AUTH>
     eventualRetryCount?:number
     OrchestrationNodeResponse?: OrchestrationNodeResponse;  // Árvore parcial
@@ -118,11 +133,14 @@ export interface CachedQueryResponse {
     duration?: number;
     expiration?: number;
     size?: number;
+    identity:string,
+    useIdentity:string,
+    variables:unknown,
 
     // 🔹 Opcionais / avançados
     source?: "network" | "cache";
     partial?: boolean;
-    response?: ExecutionResult<ObjMap<unknown>, ObjMap<unknown>>
+    response?: ExecutionResult
 }
 
 export type NotifierLevel = "success" |  "info" |  "warning"  | "error" ;
@@ -152,7 +170,7 @@ export type InstanceStatus<
     UseUnauthenticatedCode?:"UNAUTHENTICATED"|string
     entries:number
     transport?:TransportLinkOptions
-    auth?:AUTH
+    auth?:AUTH|Promise<AUTH>
     authenticated?:boolean|null|undefined
     identity?:ID|null
     health?:boolean
@@ -224,6 +242,8 @@ export interface ApolloVaultServiceInit<
     publishAuthenticated():void
     requestAuthentication():void
     createEventual(  entry:EventualDeliveryTask<ID,AUTH> ):Promise<{entry?:EventualDeliveryTask<ID,AUTH>, error?:GraphQLError} >
+    updateEventual(  entry:EventualDeliveryTask<ID,AUTH> ):Promise<{entry?:EventualDeliveryTask<ID,AUTH>, error?:GraphQLError} >
+    removeEventual(  entry:EventualDeliveryTask<ID,AUTH> ):Promise<{entry?:EventualDeliveryTask<ID,AUTH>, error?:GraphQLError} >
     createEventualFormOrchestration(result: OrchestrationNodeResponse):Promise<{entry?:EventualDeliveryTask<ID,AUTH>, error?:GraphQLError} >
     getOrchestrationRootRegistry( registry:string, args:unknown ):Promise<OrchestrationTreeRoot<Record<string, unknown>, Record<string, unknown>, unknown> | undefined>
 }
@@ -289,10 +309,6 @@ export type OrchestrationLinkedNode<
     |(OrchestrationNode<I,N,R>[])
 
 
-export type Variable<V extends { [k in keyof V]:V[k]}> =
-    unknown
-    | Promise<unknown>
-;
 
 export type EventPublish<
     ED extends { [k in keyof ED]: ED[k] extends ((...args: infer P) => unknown) ? ED[k] : never }
@@ -323,29 +339,64 @@ export type OrchestrationEventDefinitions<
     R,
 > = {
 
+
     /**
-     * Call if node is registredo on eventual delivery
+     *
      * @param node
      */
     eventual( node:OrchestrationNode<I,NT,R> ):void,
 
-    /**
-     * Call before start node service
-     * @param node
-     */
-    started( node:OrchestrationNode<I,NT,R> ):void,
 
     /**
-     * Call after complete service for this node
+     *
+     * @param ctx
+     * @param previews
+     * @param parent
+     * @param root
+     */
+    eventualized(ctx:I, previews:OrchestrationNodeResponse, parent?:OrchestrationNodeResponse, root?: OrchestrationNodeResponse ):void
+
+    /**
+     *
+     * @param node
+     */
+    begin( node:OrchestrationNode<I,NT,R> ):void,
+
+    /**
+     *
+     * @param node
+     */
+    ["started:resolve"]( node:OrchestrationNode<I,NT,R> ):void,
+
+
+    /**
+     *
+     * @param node
+     * @param status
+     */
+    ["started:completion"]( node:OrchestrationNode<I,NT,R>, status:OrchestrationNodeResponse ):void,
+
+
+    /**
+     *
+     * @param response
+     */
+    resolved( response:OrchestrationNodeResponse ):void,
+
+
+    /**
+     *
      * @param response
      */
     completed( response:OrchestrationNodeResponse ):void,
 
     /**
-     * Call after Finished service of node and all node service child
+     *
      * @param response
+     * @param node
      */
-    finalized( response:OrchestrationNodeResponse ):void,
+    end( response:OrchestrationNodeResponse, node:OrchestrationNode<I,NT,R> ):void,
+
 }
 
 
@@ -366,18 +417,22 @@ export interface Orchestration<
     NT,
     R,
 > {
-    operation: DocumentNode;
+    operation: DocumentNode
+        | Promise<DocumentNode>
+        | ( <V extends {[k in keyof V]:V[k]}>( ctx:I, parent?:OrchestrationNodeResponse, root?: OrchestrationNodeResponse) => DocumentNode|Promise<DocumentNode>)
+
     variables?:
         ( Record<string, unknown> | Promise<Record<string, unknown>> )
-        | ( <V extends {[k in keyof V]:V[k]}>( initials?:I, parent?:OrchestrationNodeResponse, root?: OrchestrationNodeResponse) => Variable<V>)
+        | ( <V extends {[k in keyof V]:V[k]}>( ctx:I, parent?:OrchestrationNodeResponse, root?: OrchestrationNodeResponse) => unknown | Promise<unknown>)
     ;
     breaker?: BreakerFunction;
     onFailure?: "break" | "continue";
     parallel?: boolean;
-    skip?: (initials?:I, parent?:OrchestrationNodeResponse, root?: OrchestrationNodeResponse) => boolean|Promise<boolean>;
+    skip?: ( ctx?:I, parent?:OrchestrationNodeResponse, root?: OrchestrationNodeResponse) => boolean|Promise<boolean>;
     BYPASS?: boolean;
     name?:string
     subscription?:(subscriber:OrchestrationSubscription<I, NT, R>) => void
+    eventualize?: ( <V extends {[k in keyof V]:V[k]}>(ctx:I, previews:OrchestrationNodeResponse, parent?:OrchestrationNodeResponse, root?: OrchestrationNodeResponse) => "rejected"|"accepted"|Promise<"rejected"|"accepted">)
     key?:string
 }
 
@@ -387,8 +442,9 @@ export interface OrchestrationRoot<
     registry: string;
     context?:
         ( Omit<DefaultContext, "OrchestrationTree"> | Promise<Omit<DefaultContext, "OrchestrationTree">> )
-        | ( <V extends {[k in keyof V]:V[k]}>( initials?:I, parent?:OrchestrationNodeResponse, root?: OrchestrationNodeResponse) => Omit<DefaultContext, "OrchestrationTree">|Promise<Omit<DefaultContext, "OrchestrationTree">>)
-    ;
+        | ( <V extends {[k in keyof V]:V[k]}>( ctx:I, parent?:OrchestrationNodeResponse, root?: OrchestrationNodeResponse) => Omit<DefaultContext, "OrchestrationTree">|Promise<Omit<DefaultContext, "OrchestrationTree">>)
+
+
     arguments?:Record<string, unknown>
 }
 
@@ -398,14 +454,9 @@ export interface OrchestrationNode<
     N extends { [ k in keyof N]:(N[k]) },
     R,
 > extends Orchestration<I, N, R>, OrchestrationRoot<I> {
-    SubscriptionChannels:SubscriptionChannels<OrchestrationSubscription<I, N, R>>
+    SubscriptionChannels:SubscriptionChannels<OrchestrationEventDefinitions<I, N, R>>
     linked?: {[k in keyof N]: N[k] & OrchestrationLinkedNode<I,N,R>};
 }
-
-
-
-// ====================== TREE ================
-
 
 
 export interface OrchestrationTree<
@@ -450,11 +501,6 @@ export type OrchestrationLinkedResolverRoot<
     R,
 > = OrchestrationLinkedResolver<I, T, R,"sync:root"|"async:root">
 
-export type OrchestrationLinkedRoot<
-    I extends { [k in keyof I]: I[k] },
-    T extends { [ k in keyof T]:(T[k]) },
-    R,
-> = OrchestrationLinkedResolver<I, T, R, "sync:root">
 
 export type OrchestrationLinkedResolver<
     I extends { [k in keyof I]: I[k] },
@@ -473,32 +519,18 @@ export type OrchestrationLinkedResolver<
     : C extends "async:list" ? Promise<OrchestrationTree<I,T,R>[]>
 
     // FUNÇÕES SÍNCRONAS
-    : C extends "func:node" ? ( initials?:I ) => OrchestrationTree<I,T,R>
-    : C extends "func:root" ? ( initials?:I ) => OrchestrationTreeRoot<I,T,R>
-    : C extends "func:list" ? ( initials?:I ) => OrchestrationTree<I,T,R>[]
+    : C extends "func:node" ? ( ctx?:I ) => OrchestrationTree<I,T,R>
+    : C extends "func:root" ? ( ctx?:I ) => OrchestrationTreeRoot<I,T,R>
+    : C extends "func:list" ? ( ctx?:I ) => OrchestrationTree<I,T,R>[]
 
     // FUNÇÕES ASSÍNCRONAS
-    : C extends "func:async:node" ? ( initials?:I ) => Promise<OrchestrationTree<I,T,R>>
-    : C extends "func:async:root" ? ( initials?:I ) => Promise<OrchestrationTreeRoot<I,T,R>>
-    : C extends "func:async:list" ? ( initials?:I ) => Promise<OrchestrationTree<I,T,R>[]>
+    : C extends "func:async:node" ? ( ctx?:I ) => Promise<OrchestrationTree<I,T,R>>
+    : C extends "func:async:root" ? ( ctx?:I ) => Promise<OrchestrationTreeRoot<I,T,R>>
+    : C extends "func:async:list" ? ( ctx?:I ) => Promise<OrchestrationTree<I,T,R>[]>
 
     // Fallback
     : OrchestrationTree<I,T,R>
     ;
-
-// ... (O restante dos tipos em types.ts)
-
-// ====================== TREE// ================
-
-export type OrchestrationTreeResolver<
-    I extends { [k in keyof I]: I[k] },
-    T extends { [ k in keyof T]:(T[k]) },
-    R
-> =
-    OrchestrationTree<I,T,R>
-    | Promise<OrchestrationTree<I,T,R>>
-    | ((initials?:I)=>OrchestrationTree<I,T,R>)
-    | ((initials?:I)=>Promise<OrchestrationTree<I,T,R>>)
 
 
 export type BreakerFunction = <
@@ -511,7 +543,6 @@ export type OrchestrationNodeResponse = {
         | OrchestrationTreeRoot<Record<string, unknown>, Record<string, unknown>, unknown>
     registry:string,
     status?:{
-        recursion?:number
         previewResolved?: boolean,
         start?: number,
         end?: number,
@@ -520,6 +551,7 @@ export type OrchestrationNodeResponse = {
         context?: DefaultContext
         skipped?:boolean
         resolved?:boolean
+        complete?:boolean
         arguments?: Record<string, unknown>,
     }
     data?: unknown;
@@ -531,3 +563,7 @@ export type OrchestrationNodeResponse = {
 }
 
 
+export type ApolloVaultServiceLink <
+    ID extends { [k in keyof ID]?:ID[k]},
+    AUTH extends { [k in keyof AUTH]?:AUTH[k]}
+> = ( service: ApolloVaultService<ID, AUTH> ) => ApolloLink

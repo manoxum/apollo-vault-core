@@ -40,7 +40,7 @@ export function CreateSubscriptionChannels<
     }
 
     const pub:EventPublish<ED> = {
-        async publishOneByOne<E extends keyof ED>( event:E, ...args: ( ED[E] extends ((...args: infer P) => unknown) ? P : never) ) {
+        async publishOneByOne<E extends keyof ED>( event:E, ...args: ( ED[E] extends ((...args: infer P) => unknown) ? P : never ) ) {
             const handlers = subscriptions[event].values();
             for (const handler of handlers) {
                 await Promise.resolve((handler as CallableFunction)( ...(args)));
