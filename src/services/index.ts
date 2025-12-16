@@ -2,7 +2,7 @@ import {
     ApolloVaultHandlers,
     ApolloVaultService,
     ApolloVaultServiceInit,
-    CreateApolloVaultOptions,
+    CreateApolloVaultOptions, EventualDeliveryTask,
     InstanceStatus,
     NotifyOptions,
     OrchestrationLinkedResolverRoot,
@@ -192,6 +192,49 @@ export function CreateApolloVaultServices <
         async getOrchestrationRootRegistry(identifier, args ) {
             const reg = Registry.registries[identifier];
             return ResolveOrchestrationRoot( reg, args );
+        },
+
+        async eventuals( opts){
+            const keys = await storages.ApolloEventualDelivery.keys();
+            console.log("storages.ApolloEventualDelivery.keys()", await storages.ApolloEventualDelivery.keys())
+            const resolved = await Promise.all(keys.map( async next => {
+                const eventual = await storages.ApolloEventualDelivery.getItem<EventualDeliveryTask<ID,AUTH>>(next);
+                console.log("Eventuals:eventual", eventual)
+                if( !eventual ) return null;
+
+                // If no options are provided, return everything
+                if (!opts) return eventual;
+
+                const tags = eventual.tags || [];
+
+                // 1. "in": Intersection must not be empty
+                if ( !!opts.in && opts.in?.length > 0) {
+                    const hasIn = opts.in.some(t => tags.includes(t));
+                    if (!hasIn) return null;
+                }
+
+                // 2. "notin": Intersection must be empty
+                if ( !!opts.notin && opts.notin?.length > 0) {
+                    const hasNotIn = opts.notin.some(t => tags.includes(t));
+                    if (hasNotIn) return null;
+                }
+
+                // 3. "is": Every required tag must be present
+                if ( !!opts.is && opts.is?.length > 0) {
+                    const hasAllIs = opts.is.every(t => tags.includes(t));
+                    if (!hasAllIs) return null;
+                }
+
+                // 4. "notis": Must fail the "is" check (does not have all these tags)
+                if ( !!opts.notis && opts.notis?.length > 0) {
+                    const hasAllNotIs = opts.notis.every(t => tags.includes(t));
+                    if (hasAllNotIs) return null;
+                }
+
+                return eventual;
+            }));
+
+            return resolved.filter( value => !!value)
         }
     }
 

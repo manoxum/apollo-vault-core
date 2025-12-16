@@ -64,6 +64,7 @@ export function CreateEventualEntry<
         service.ApolloEventualDelivery.setItem( identifier, entry ).then(() => {
             resolve({ entry });
         }).catch((saveError) => {
+            console.error( "ErrorAoCriarEventualDelivery", saveError, entry );
             resolve({ error: saveError });
         });
     });
@@ -80,10 +81,11 @@ export async function CreateEventualEntryFromNodeOrchestration<
 
     if( !EventualDelivery ) return { error: new GraphQLError( "Orchestration is not EventualDelivery")};
 
+
     const entry:EventualDeliveryTask<ID,AUTH> = {
         mutationName: node?.name ?? "OrchestrationMutation",
         instant: new Date().toISOString(),
-        query: node?.operation as DocumentNode,
+        query: result.operation as DocumentNode,
         variables: vars,
         tags: EventualDelivery.tags,
         context: context,

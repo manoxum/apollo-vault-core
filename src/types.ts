@@ -202,6 +202,13 @@ export type SubscriptionOf<T extends SubscriptionEvent> = T;
 
 export type UpdatableFields =typeof UPDATABLE_FIELDS[number];
 
+export type EventualOptions = {
+    in?:string[],
+    notin?:string[],
+    is?:string[],
+    notis?:string[]
+}
+
 export interface OfflineApolloShared<
     ID extends { [k in keyof ID]?:ID[k]},
     AUTH extends { [k in keyof AUTH]?:AUTH[k]}
@@ -227,6 +234,7 @@ export interface OfflineApolloShared<
 
     registry<I,T,R>( registry:`registry://${string}:${string}`, resolver:OrchestrationLinkedResolverRoot<I,T,R>):Promise<"replaced"| "created">
     eventualDeliveryFromRegistry(registry:string ):Promise<string[]>
+    eventuals( opts?:EventualOptions ):Promise<EventualDeliveryTask<ID, AUTH>[]>
 
 }
 
@@ -543,6 +551,7 @@ export type OrchestrationNodeResponse = {
         | OrchestrationTreeRoot<Record<string, unknown>, Record<string, unknown>, unknown>
     registry:string,
     status?:{
+        operation?: DocumentNode
         previewResolved?: boolean,
         start?: number,
         end?: number,

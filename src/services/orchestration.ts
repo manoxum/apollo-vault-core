@@ -7,7 +7,7 @@ import {
     OrchestrationNodeResponse, OrchestrationTreeRoot
 } from "../types";
 import {isMutationOperation} from "../utils/operation";
-import {DefaultContext, DocumentNode} from "@apollo/client";
+import {DefaultContext} from "@apollo/client";
 import {ExecutionResult} from "graphql/execution";
 import {GraphQLError} from "graphql";
 import {CreateSubscriptionChannels} from "../utils/subscription";
@@ -121,14 +121,13 @@ export async function ExecuteOrchestrationService<
         }
 
 
-        let opr: DocumentNode;
         if (typeof node.operation === "function") {
-            opr = await node.operation( args as Record<string, unknown>, parent, root);
+            current.status!.operation = await node.operation( args as Record<string, unknown>, parent, root);
         } else {
-            opr = await node.operation ;
+            current.status!.operation = await node.operation ;
         }
 
-        const isMutation = isMutationOperation( opr );
+        const isMutation = isMutationOperation( current.status!.operation );
 
 
         current.status!.variables =  vars;
@@ -156,12 +155,12 @@ export async function ExecuteOrchestrationService<
         try {
             if (isMutation) {
                 ExecResult = await instance.client!.mutate({
-                    mutation: opr,
+                    mutation: current.status!.operation,
                     ...execOptions
                 });
             } else {
                 ExecResult = await instance.client!.query({
-                    query: opr,
+                    query: current.status!.operation,
                     ...execOptions,
                 });
             }
